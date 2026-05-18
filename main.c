@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
+#include <string.h>
 #include "raylib.h"
 #include "raymath.h"
 
@@ -10,7 +12,19 @@
 #define MIN_RADIUS 5.0
 #define MIN_ACCEL -20.0
 #define MAX_ACCEL 20.0
-#define MASS 2.0;
+#define MASS 2.0
+#define NUM_BUCKETS 8192
+#define MAX_PER_BUCKET 128
+#define CELL_SIZE (MAX_RADIUS * 2.0f)
+
+struct Bucket {
+    int particleIndicies[MAX_PER_BUCKET];
+    int count;
+};
+
+struct HashTable {
+    struct Bucket buckets[NUM_BUCKETS];
+};
 
 struct ParticleSystem {
     struct Vector2 *positions;
@@ -19,6 +33,37 @@ struct ParticleSystem {
     float *radii;
     int count;
 };
+
+int hashCell(int cx, int cy) {
+    int x = (int)(cx * 92837111);
+    int y = (int)(cy * 689287499);
+    return abs(x ^ y) % NUM_BUCKETS;
+}
+
+int hash(Vector2 position) {
+    int x = (int)(position.x / CELL_SIZE);
+    int y = (int)(position.y / CELL_SIZE);
+    return hashCell(x, y);
+}
+
+void CreateTable(struct ParticleSystem *ps, struct HashTable *ht) {
+    for(int i = 0; i < ps->count; i++) {
+        int bucket = hash(ps->positions[i]);
+        int count = ht->buckets[bucket].count;
+        
+        if (count < MAX_PER_BUCKET) {
+            ht->buckets[bucket].count++;
+            ht->buckets[bucket].particleIndicies[count] = i;
+        }
+    }
+}
+
+void ClearBuckets(struct HashTable *ht) {
+    for (int i = 0; i < NUM_BUCKETS; i++) {
+        ht->buckets[i].count = 0;
+        memset(ht->buckets[i].particleIndicies, 0, sizeof(ht->buckets[i].particleIndicies));
+    }
+}
 
 float GetRandomFloat(float min, float max) {
     float scale = rand() / (float) RAND_MAX;
@@ -72,47 +117,57 @@ void CheckBoundingBox(Vector2 *pos, Vector2 *vel, float radius) {
     }
 }
 
-void CollisionDetection(struct ParticleSystem *pS, int currentParticleIndex) {
+void CollisionDetection(struct ParticleSystem *pS, struct HashTable *ht, int currentParticleIndex) {
     Vector2 currentPos = pS->positions[currentParticleIndex];
     float currentRadius = pS->radii[currentParticleIndex];
     Vector2 currentVel = pS->velocities[currentParticleIndex];
+    
+    int cellX = (int)(currentPos.x / CELL_SIZE);
+    int cellY = (int)(currentPos.y / CELL_SIZE);
 
-    for(int i = currentParticleIndex + 1; i < pS->count; i++) {
-        Vector2 otherPos = pS->positions[i];
-        float otherRadius = pS->radii[i];
-        Vector2 otherVel = pS->velocities[i];
-        
-        float dx = otherPos.x - currentPos.x;
-        float dy = otherPos.y - currentPos.y;
-        
-        float dist2 = dx*dx + dy*dy;
-        float minDist = (otherRadius + currentRadius);
-
-        if (dist2 == 0.0f) {
-            continue;
-        }
-        
-        if(dist2 <= minDist * minDist) {
-            //collision
-            pS->velocities[i] = currentVel;
-            currentVel = otherVel;
+    for(int cx = cellX - 1; cx <= cellX + 1; cx++) {
+        for(int cy = cellY - 1; cy <= cellY + 1; cy++) {
+            struct Bucket curBucket = ht->buckets[hashCell(cx, cy)];
             
-            float dist = sqrtf(dist2);
-            float overlap = minDist - dist;
-            float nx = dx / dist;
-            float ny = dy / dist;
+            for(int j = 0; j < curBucket.count; j++) {
+                int i = curBucket.particleIndicies[j];
+                
+                Vector2 otherPos = pS->positions[i];
+                float otherRadius = pS->radii[i];
+                Vector2 otherVel = pS->velocities[i];
+                
+                float dx = otherPos.x - currentPos.x;
+                float dy = otherPos.y - currentPos.y;
+                
+                float dist2 = dx*dx + dy*dy;
+                float minDist = (otherRadius + currentRadius);
 
-            pS->positions[i].x += overlap * nx * 0.1f;
-            pS->positions[i].y += overlap * nx * 0.1f;
-            pS->positions[currentParticleIndex].x -= overlap * nx * 0.1f;
-            pS->positions[currentParticleIndex].y -= overlap * ny * 0.1f;
+                if (i == currentParticleIndex || dist2 == 0.0f) {
+                    continue;
+                }
+                
+                if(dist2 <= minDist * minDist) {
+                    //collision
+                    pS->velocities[i] = currentVel;
+                    currentVel = otherVel;
+                    
+                    float dist = sqrtf(dist2);
+                    float overlap = minDist - dist;
+                    float nx = dx / dist;
+                    float ny = dy / dist;
+
+                    pS->positions[i].x += overlap * nx * 0.1f;
+                    pS->positions[i].y += overlap * ny * 0.1f;
+                    pS->positions[currentParticleIndex].x -= overlap * nx * 0.1f;
+                    pS->positions[currentParticleIndex].y -= overlap * ny * 0.1f;
+                }
+            }
         }
     }
-
     pS->velocities[currentParticleIndex] = currentVel;
 }
 
-void UpdatePos(struct ParticleSystem *pS, float dt) {
+void UpdatePos(struct ParticleSystem *pS, struct HashTable *ht, float dt) {
     for (int i = 0; i < pS->count; i++) {
         Vector2 accel = Vector2Scale(pS->accelerations[i], dt*dt*0.5f);
         Vector2 newPos = Vector2Add(pS->positions[i], Vector2Scale(pS->velocities[i], dt));
@@ -121,7 +176,7 @@ void UpdatePos(struct ParticleSystem *pS, float dt) {
         pS->positions[i] = newPos;
         pS->velocities[i] = Vector2Add(pS->velocities[i], Vector2Scale(pS->accelerations[i], dt));
         
-        CollisionDetection(pS, i);
+        CollisionDetection(pS, ht, i);
         CheckBoundingBox(&pS->positions[i], &pS->velocities[i], pS->radii[i]);
     }
 }
@@ -140,10 +195,13 @@ int main(int argc, char* argv[]) {
 
     InitWindow(SW, SH, "particle sim");
     SetTargetFPS(60);
+    
+    struct HashTable ht;
 
     while(!WindowShouldClose()) {
-        
-        UpdatePos(&system, GetFrameTime());
+        ClearBuckets(&ht);
+        CreateTable(&system, &ht);
+        UpdatePos(&system, &ht, GetFrameTime());
         
         BeginDrawing();
             ClearBackground(BLACK);
