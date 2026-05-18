@@ -17,4 +17,4 @@ Currently, collisions are detected with O($n^2$) time complexity, so I may imple
 
 Demo video with 1000 particles
 
-![Particles](./assets/particles.mp4)
+https://github.com/user-attachments/assets/638992ee-bc48-4956-9f7a-9d6dc77a0844
