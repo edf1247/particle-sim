@@ -119,7 +119,7 @@ void UpdatePos(struct ParticleSystem *pS, float dt) {
         newPos = Vector2Add(newPos, accel);
 
         pS->positions[i] = newPos;
-        pS->velocities[i] = Vector2Add(pS->velocities[i], Vector2Scale(Vector2Add(pS->accelerations[i], accel), dt * 0.5f));
+        pS->velocities[i] = Vector2Add(pS->velocities[i], Vector2Scale(pS->accelerations[i], dt));
         
         CollisionDetection(pS, i);
         CheckBoundingBox(&pS->positions[i], &pS->velocities[i], pS->radii[i]);
