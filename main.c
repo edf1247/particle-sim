@@ -6,12 +6,16 @@
 
 #define SW 1920
 #define SH 1080
-#define MAX_RADIUS 20.0
-#define MIN_RADIUS 15.0
+#define MAX_RADIUS 15.0
+#define MIN_RADIUS 10.0
+#define MIN_ACCEL -40.0
+#define MAX_ACCEL 40.0
+#define MASS 2.0;
 
 struct ParticleSystem {
     struct Vector2 *positions;
-    struct Vector2 *oldPositions;
+    struct Vector2 *velocities;
+    struct Vector2 *accelerations;
     float *radii;
     int count;
 };
@@ -21,17 +25,42 @@ float GetRandomFloat(float min, float max) {
     return min + scale * ( max - min );
 }
 
+int DetectOverlap(struct ParticleSystem *particleSystem, Vector2 curPos, float curRadius) {
+    for(int i = 0; i < particleSystem->count; i++) {
+        float dx = particleSystem->positions[i].x - curPos.x;
+        float dy = particleSystem->positions[i].y - curPos.y;
+        float minDist = particleSystem->radii[i] - curRadius;
+
+        if(dx*dx + dy*dy <= minDist) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void InitParticleSystem(struct ParticleSystem *particleSystem, int numParticles) {
     particleSystem->count = numParticles;
     particleSystem->positions = malloc(numParticles * sizeof(Vector2));
-    particleSystem->oldPositions = malloc(numParticles * sizeof(Vector2));
+    particleSystem->velocities = malloc(numParticles * sizeof(Vector2));
+    particleSystem->accelerations = malloc(numParticles * sizeof(Vector2));
     particleSystem->radii = malloc(numParticles * sizeof(float));
 
     for(int i = 0; i < numParticles; i++) {    
-        Vector2 pos = {GetRandomValue(0, SW), GetRandomValue(0, SH)};
-        particleSystem->radii[i] = GetRandomFloat(MIN_RADIUS, MAX_RADIUS);
-        particleSystem->positions[i] = pos;
-        particleSystem->oldPositions[i] = particleSystem->positions[i];
+        Vector2 initPos = {GetRandomValue(0, SW), GetRandomValue(0, SH)};
+        float initRadius = GetRandomFloat(MIN_RADIUS, MAX_RADIUS);
+
+        /*while (DetectOverlap(particleSystem, initPos, initRadius) == 1) {
+            initPos.x = GetRandomValue(0, SW); 
+            initPos.y = GetRandomValue(0, SH);
+        }*/
+
+        Vector2 initVel = {0.0f, 0.0f};
+        Vector2 initAccel = {GetRandomFloat(MIN_ACCEL, MAX_ACCEL), GetRandomFloat(MIN_ACCEL, MAX_ACCEL)};
+
+        particleSystem->radii[i] = initRadius;
+        particleSystem->positions[i] = initPos;
+        particleSystem->velocities[i] = initVel;
+        particleSystem->accelerations[i] = initAccel;
     }
 }
 
@@ -42,34 +71,76 @@ void DrawParticles(struct ParticleSystem *particleSystem) {
     }
 }
 
-void CheckBoundingBox(Vector2 *pos, float radius) {
+void CheckBoundingBox(Vector2 *pos, Vector2 *vel, float radius) {
     if (pos->x <= radius) {
         pos->x = radius;
+        vel->x = -vel->x;
     }
     else if (pos->x >= SW - radius) {
         pos->x = SW - radius;
+        vel->x = -vel->x;
     }
     if (pos->y <= radius) {
         pos->y = radius;
+        vel->y = -vel->y;
     }
     else if (pos->y >= SH - radius) {
         pos->y = SH - radius;
+        vel->y = -vel->y;
     }
 }
 
-void UpdatePos(struct ParticleSystem *particleSystem, float dt) {
-    // formula: newPos = 2 * curPos - oldPos * accel * dt**2
-    Vector2 gravity = {0.0, 32.174f};
-    for (int i = 0; i < particleSystem->count; i++) {
-        Vector2 scaledCur = Vector2Scale(particleSystem->positions[i], 2);
-        Vector2 subbed = Vector2Subtract(scaledCur, particleSystem->oldPositions[i]);
-        
-        Vector2 scaledAccel = Vector2Scale(gravity, dt*dt);
-        Vector2 newPos = Vector2Add(subbed, scaledAccel);
-        CheckBoundingBox(&newPos, particleSystem->radii[i]);
+void CollisionDetection(struct ParticleSystem *pS, int currentParticleIndex) {
+    Vector2 currentPos = pS->positions[currentParticleIndex];
+    float currentRadius = pS->radii[currentParticleIndex];
+    Vector2 currentVel = pS->velocities[currentParticleIndex];
 
-        particleSystem->oldPositions[i] = particleSystem->positions[i];
-        particleSystem->positions[i] = newPos;
+    for(int i = currentParticleIndex + 1; i < pS->count; i++) {
+        Vector2 otherPos = pS->positions[i];
+        float otherRadius = pS->radii[i];
+        Vector2 otherVel = pS->velocities[i];
+        
+        float dx = otherPos.x - currentPos.x;
+        float dy = otherPos.y - currentPos.y;
+        
+        float dist2 = dx*dx + dy*dy;
+        float minDist = (otherRadius + currentRadius);
+
+        if (dist2 == 0.0f) {
+            continue;
+        }
+        
+        if(dist2 <= minDist * minDist) {
+            //collision
+            pS->velocities[i] = currentVel;
+            currentVel = otherVel;
+            
+            float dist = sqrtf(dist2);
+            float overlap = minDist - dist;
+            float nx = dx / dist;
+            float ny = dy / dist;
+
+            pS->positions[i].x += overlap * nx * 0.1f;
+            pS->positions[i].y += overlap * nx * 0.1f;
+            pS->positions[currentParticleIndex].x -= overlap * nx * 0.1f;
+            pS->positions[currentParticleIndex].y -= overlap * ny * 0.1f;
+        }
+    }
+
+    pS->velocities[currentParticleIndex] = currentVel;
+}
+
+void UpdatePos(struct ParticleSystem *pS, float dt) {
+    for (int i = 0; i < pS->count; i++) {
+        Vector2 accel = Vector2Scale(pS->accelerations[i], dt*dt*0.5f);
+        Vector2 newPos = Vector2Add(pS->positions[i], Vector2Scale(pS->velocities[i], dt));
+        newPos = Vector2Add(newPos, accel);
+
+        pS->positions[i] = newPos;
+        pS->velocities[i] = Vector2Add(pS->velocities[i], Vector2Scale(Vector2Add(pS->accelerations[i], accel), dt * 0.5f));
+        
+        CollisionDetection(pS, i);
+        CheckBoundingBox(&pS->positions[i], &pS->velocities[i], pS->radii[i]);
     }
 }
 
@@ -100,7 +171,9 @@ int main(int argc, char* argv[]) {
 
     CloseWindow();
     free(system.positions);
-    free(system.oldPositions);
+    free(system.velocities);
+    free(system.accelerations);
+    free(system.radii);
 
     return 0;
 }
