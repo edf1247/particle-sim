@@ -1,26 +1,35 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include "raylib.h"
 #include "raymath.h"
 
 #define SW 1920
 #define SH 1080
-#define PARTICLE_RADIUS 20
+#define MAX_RADIUS 20.0
+#define MIN_RADIUS 15.0
 
 struct ParticleSystem {
     struct Vector2 *positions;
     struct Vector2 *oldPositions;
+    float *radii;
     int count;
 };
+
+float GetRandomFloat(float min, float max) {
+    float scale = rand() / (float) RAND_MAX;
+    return min + scale * ( max - min );
+}
 
 void InitParticleSystem(struct ParticleSystem *particleSystem, int numParticles) {
     particleSystem->count = numParticles;
     particleSystem->positions = malloc(numParticles * sizeof(Vector2));
     particleSystem->oldPositions = malloc(numParticles * sizeof(Vector2));
+    particleSystem->radii = malloc(numParticles * sizeof(float));
 
     for(int i = 0; i < numParticles; i++) {    
         Vector2 pos = {GetRandomValue(0, SW), GetRandomValue(0, SH)};
-
+        particleSystem->radii[i] = GetRandomFloat(MIN_RADIUS, MAX_RADIUS);
         particleSystem->positions[i] = pos;
         particleSystem->oldPositions[i] = particleSystem->positions[i];
     }
@@ -29,7 +38,22 @@ void InitParticleSystem(struct ParticleSystem *particleSystem, int numParticles)
 void DrawParticles(struct ParticleSystem *particleSystem) {
     for(int i = 0; i < particleSystem->count; i++) {
         Vector2 curPos = particleSystem->positions[i];
-        DrawCircle(curPos.x, curPos.y, PARTICLE_RADIUS, WHITE);
+        DrawCircle(curPos.x, curPos.y, particleSystem->radii[i], WHITE);
+    }
+}
+
+void CheckBoundingBox(Vector2 *pos, float radius) {
+    if (pos->x <= radius) {
+        pos->x = radius;
+    }
+    else if (pos->x >= SW - radius) {
+        pos->x = SW - radius;
+    }
+    if (pos->y <= radius) {
+        pos->y = radius;
+    }
+    else if (pos->y >= SH - radius) {
+        pos->y = SH - radius;
     }
 }
 
@@ -42,6 +66,7 @@ void UpdatePos(struct ParticleSystem *particleSystem, float dt) {
         
         Vector2 scaledAccel = Vector2Scale(gravity, dt*dt);
         Vector2 newPos = Vector2Add(subbed, scaledAccel);
+        CheckBoundingBox(&newPos, particleSystem->radii[i]);
 
         particleSystem->oldPositions[i] = particleSystem->positions[i];
         particleSystem->positions[i] = newPos;
@@ -55,6 +80,7 @@ int main(int argc, char* argv[]) {
     }
 
     char *p;
+    srand((unsigned int)time(NULL));
 
     struct ParticleSystem system;
     InitParticleSystem(&system, strtol(argv[1], &p, 10));
@@ -63,7 +89,9 @@ int main(int argc, char* argv[]) {
     SetTargetFPS(60);
 
     while(!WindowShouldClose()) {
+        
         UpdatePos(&system, GetFrameTime());
+        
         BeginDrawing();
             ClearBackground(BLACK);
             DrawParticles(&system);
