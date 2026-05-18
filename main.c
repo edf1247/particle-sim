@@ -19,7 +19,7 @@ void InitParticleSystem(struct ParticleSystem *particleSystem, int numParticles)
     particleSystem->oldPositions = malloc(numParticles * sizeof(Vector2));
 
     for(int i = 0; i < numParticles; i++) {    
-        Vector2 pos = {GetRandomValue(0, SW), 0.0f};
+        Vector2 pos = {GetRandomValue(0, SW), GetRandomValue(0, SH)};
 
         particleSystem->positions[i] = pos;
         particleSystem->oldPositions[i] = particleSystem->positions[i];
@@ -48,14 +48,16 @@ void UpdatePos(struct ParticleSystem *particleSystem, float dt) {
     }
 }
 
-int main(int argc, char* argv) {
+int main(int argc, char* argv[]) {
     if (argc != 2) {
         printf("Usage: ./sim <num particles>\n");
         return -1;
     }
 
+    char *p;
+
     struct ParticleSystem system;
-    InitParticleSystem(&system, argv[1]);
+    InitParticleSystem(&system, strtol(argv[1], &p, 10));
 
     InitWindow(SW, SH, "particle sim");
     SetTargetFPS(60);
