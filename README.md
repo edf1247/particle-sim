@@ -12,3 +12,9 @@ I implemented a basic particle simulation in C, using raylib. The physics simula
 To have more interesting behavior, on initialization each particle is assigned a random acceleration.
 
 Currently, collisions are detected with O($n^2$) time complexity, so I may implement cell hashing in order to improve efficiency.
+
+## Demo
+
+Demo video with 1000 particles
+
+![Particles](./assets/particles.mp4)

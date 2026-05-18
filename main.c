@@ -6,10 +6,10 @@
 
 #define SW 1920
 #define SH 1080
-#define MAX_RADIUS 15.0
-#define MIN_RADIUS 10.0
-#define MIN_ACCEL -40.0
-#define MAX_ACCEL 40.0
+#define MAX_RADIUS 10.0
+#define MIN_RADIUS 5.0
+#define MIN_ACCEL -20.0
+#define MAX_ACCEL 20.0
 #define MASS 2.0;
 
 struct ParticleSystem {
