@@ -25,19 +25,6 @@ float GetRandomFloat(float min, float max) {
     return min + scale * ( max - min );
 }
 
-int DetectOverlap(struct ParticleSystem *particleSystem, Vector2 curPos, float curRadius) {
-    for(int i = 0; i < particleSystem->count; i++) {
-        float dx = particleSystem->positions[i].x - curPos.x;
-        float dy = particleSystem->positions[i].y - curPos.y;
-        float minDist = particleSystem->radii[i] - curRadius;
-
-        if(dx*dx + dy*dy <= minDist) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 void InitParticleSystem(struct ParticleSystem *particleSystem, int numParticles) {
     particleSystem->count = numParticles;
     particleSystem->positions = malloc(numParticles * sizeof(Vector2));
@@ -48,11 +35,6 @@ void InitParticleSystem(struct ParticleSystem *particleSystem, int numParticles)
     for(int i = 0; i < numParticles; i++) {    
         Vector2 initPos = {GetRandomValue(0, SW), GetRandomValue(0, SH)};
         float initRadius = GetRandomFloat(MIN_RADIUS, MAX_RADIUS);
-
-        /*while (DetectOverlap(particleSystem, initPos, initRadius) == 1) {
-            initPos.x = GetRandomValue(0, SW); 
-            initPos.y = GetRandomValue(0, SH);
-        }*/
 
         Vector2 initVel = {0.0f, 0.0f};
         Vector2 initAccel = {GetRandomFloat(MIN_ACCEL, MAX_ACCEL), GetRandomFloat(MIN_ACCEL, MAX_ACCEL)};
@@ -170,6 +152,7 @@ int main(int argc, char* argv[]) {
     }
 
     CloseWindow();
+ 
     free(system.positions);
     free(system.velocities);
     free(system.accelerations);
