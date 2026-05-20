@@ -9,9 +9,12 @@ I implemented a basic particle simulation in C, using raylib. The physics simula
 - $v(t + \Delta{t}) = v(t) + \frac{(a(t) + a(t + \Delta(t)))\Delta(t)}{2}$
 - In this sim, acceleration remained constant for each particle, so the new velocity calculation can be simplified to just $v(t) + a(t)\Delta(t)$
 
-To have more interesting behavior, on initialization each particle is assigned a random acceleration.
+## Features
 
-Also added spatial hashing in order to improve collision performance.
+- Collision Detection w/ Spatial Hashing for improved performance
+- Each particle is initialized w/ random acceleration for more interesting behavior
+- Pressing G turns on gravity
+- Clicking the Mouse 1 will repel particles within a blast radius
 
 ## Demo
 

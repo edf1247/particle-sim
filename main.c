@@ -10,12 +10,16 @@
 #define SH 1080
 #define MAX_RADIUS 10.0
 #define MIN_RADIUS 5.0
-#define MIN_ACCEL -20.0
-#define MAX_ACCEL 20.0
+#define MIN_ACCEL -30.0
+#define MAX_ACCEL 30.0
 #define MASS 2.0
 #define NUM_BUCKETS 8192
 #define MAX_PER_BUCKET 128
 #define CELL_SIZE (MAX_RADIUS * 2.0f)
+#define GRAVITY_MULT 4
+#define RESTITUTION 0.65;
+#define BLAST_RADIUS 100.0f
+#define BLAST_STRENGTH 200.0f
 
 struct Bucket {
     int particleIndicies[MAX_PER_BUCKET];
@@ -113,7 +117,7 @@ void CheckBoundingBox(Vector2 *pos, Vector2 *vel, float radius) {
     }
     else if (pos->y >= SH - radius) {
         pos->y = SH - radius;
-        vel->y = -vel->y;
+        vel->y = -vel->y * RESTITUTION;
     }
 }
 
@@ -167,14 +171,52 @@ void CollisionDetection(struct ParticleSystem *pS, struct HashTable *ht, int cur
     pS->velocities[currentParticleIndex] = currentVel;
 }
 
+void ApplyImpulse(struct ParticleSystem *pS, struct HashTable *ht) {
+    if(IsMouseButtonPressed(0)) {
+        Vector2 mousePos = GetMousePosition();
+        int cellRange = (int)(BLAST_RADIUS / CELL_SIZE);
+        int cellX = (int)(mousePos.x / CELL_SIZE);
+        int cellY = (int)(mousePos.y / CELL_SIZE);
+
+        for(int cx = cellX - cellRange; cx <= cellX + cellRange; cx++) {
+            for(int cy = cellY - cellRange; cy <= cellY + cellRange; cy++) {
+                struct Bucket curBucket = ht->buckets[hashCell(cx, cy)];
+                for(int i = 0; i < curBucket.count; i++) {
+                    int curP = curBucket.particleIndicies[i];
+                    
+                    Vector2 dir = Vector2Subtract(pS->positions[curP], mousePos);
+                    float dist = Vector2Length(dir);
+
+                    if(dist > 0 && dist < BLAST_RADIUS) {
+                        Vector2 norm = Vector2Scale(dir, 1.0f / dist);
+                        Vector2 impulse = Vector2Scale(norm, BLAST_STRENGTH);
+
+                        pS->velocities[curP] = Vector2Add(pS->velocities[curP], impulse);
+                    }
+                }
+            }
+        }
+    }
+}
+
+Vector2 ApplyForces(Vector2 accel) {
+    if(IsKeyPressed(KEY_G)) {
+        Vector2 newAccel = {0.0f, 9.81f * GRAVITY_MULT};
+        return newAccel;
+    }
+    return accel;
+}
+
 void UpdatePos(struct ParticleSystem *pS, struct HashTable *ht, float dt) {
     for (int i = 0; i < pS->count; i++) {
-        Vector2 accel = Vector2Scale(pS->accelerations[i], dt*dt*0.5f);
+        Vector2 oldAccel = pS->accelerations[i];
+        Vector2 accelScaled = Vector2Scale(oldAccel, dt*dt*0.5f);
         Vector2 newPos = Vector2Add(pS->positions[i], Vector2Scale(pS->velocities[i], dt));
-        newPos = Vector2Add(newPos, accel);
+        newPos = Vector2Add(newPos, accelScaled);
 
         pS->positions[i] = newPos;
-        pS->velocities[i] = Vector2Add(pS->velocities[i], Vector2Scale(pS->accelerations[i], dt));
+        pS->accelerations[i] = ApplyForces(oldAccel);
+        pS->velocities[i] = Vector2Add(pS->velocities[i], Vector2Scale(Vector2Add(pS->accelerations[i], oldAccel), dt * 0.5f));
         
         CollisionDetection(pS, ht, i);
         CheckBoundingBox(&pS->positions[i], &pS->velocities[i], pS->radii[i]);
@@ -201,10 +243,12 @@ int main(int argc, char* argv[]) {
     while(!WindowShouldClose()) {
         ClearBuckets(&ht);
         CreateTable(&system, &ht);
+        ApplyImpulse(&system, &ht);
         UpdatePos(&system, &ht, GetFrameTime());
         
         BeginDrawing();
             ClearBackground(BLACK);
+            DrawFPS(0, 0);
             DrawParticles(&system);
         EndDrawing();
     }
